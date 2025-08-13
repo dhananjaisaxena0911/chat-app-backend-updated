@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String            @id @default(uuid())
+  username         String            @unique
+  password         String
+  email            String            @unique
+  groupMemberships GroupMember[]     @relation("UserGroupMemberships")
+  groupMessages    GroupMessage[]    @relation("UserGroupMessages")
+  receivedMessages Message[]         @relation("RecipientMessages")
+  message          Message[]         @relation("SentMessages")
+  conversations    Conversation[]    @relation("ParticipantConversations")
+  messageReactions MessageReaction[] @relation("UserReactions")
+  followers Follow[] @relation("Followers")
+  following Follow[] @relation("Following")
+  Story Story[]           @relation("UserStories")
+  blogs Blog[] 
+  Group Group[] @relation("GroupAdmin")
+}
+
+model Message {
+  id             String            @id @default(uuid())
+  content        String
+  senderId       String
+  recipientId    String?
+  createdAt      DateTime          @default(now())
+  conversationId String
+  reactions      MessageReaction[]
+  status         String            @default("sent")
+  conversation   Conversation      @relation(fields: [conversationId], references: [id])
+  recipient      User?             @relation("RecipientMessages", fields: [recipientId], references: [id])
+  sender         User              @relation("SentMessages", fields: [senderId], references: [id])
+}
+
+model Conversation {
+  id           String    @id @default(uuid())
+  isGroup      Boolean   @default(false)
+  name         String?
+  createdAt    DateTime  @default(now())
+  messages     Message[]
+  participants User[]    @relation("ParticipantConversations")
+}
+
+model Group {
+  id          String         @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime ?      @updatedAt
+  admin       User?           @relation("GroupAdmin", fields: [adminId], references: [id])
+  adminId     String?
+  members     GroupMember[]  @relation("GroupMembers")
+  messages    GroupMessage[] @relation("GroupMessages")
+}
+
+model GroupMember {
+  id       String   @id @default(uuid())
+  userId   String
+  groupId  String
+  joinedAt DateTime @default(now())
+  group    Group    @relation("GroupMembers", fields: [groupId], references: [id], onDelete: Cascade)
+  user     User     @relation("UserGroupMemberships", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+}
+
+model GroupMessage {
+  id        String   @id @default(uuid())
+  groupId   String
+  senderId  String
+  content   String
+  timeStamp DateTime @default(now())
+  status    String   @default("sent")
+
+  group  Group @relation("GroupMessages", fields: [groupId], references: [id])
+  sender User  @relation("UserGroupMessages", fields: [senderId], references: [id])
+
+  reactions MessageReaction[] @relation("GroupMessageReactions")
+}
+
+model MessageReaction {
+  id             String  @id @default(uuid())
+  userId         String
+  emoji          String
+  messageId      String? // one-to-one private message
+  groupMessageId String? // group message
+
+  user         User          @relation("UserReactions", fields: [userId], references: [id])
+  message      Message?      @relation(fields: [messageId], references: [id])
+  groupMessage GroupMessage? @relation("GroupMessageReactions", fields: [groupMessageId], references: [id])
+
+  @@unique([userId, messageId])
+  @@unique([userId, groupMessageId])
+}
+
+model Blog{
+  id String @id @default(uuid())
+  title String
+  content String
+  imageUrl String?
+  authorId String
+  author User @relation(fields: [authorId] , references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Follow{
+  id String @id @default(uuid())
+  follower User @relation("Following", fields: [followerId],references: [id])
+  followerId String 
+  following User @relation("Followers",fields: [followingId],references: [id])
+  followingId String
+  createdAt DateTime @default(now())
+
+  @@unique([followerId,followingId])
+}
+
+model Story{
+  id String @id @default(uuid())
+  user User @relation("UserStories",fields: [userId],references: [id])
+  userId String
+  imageUrl String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
