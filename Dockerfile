@@ -3,20 +3,20 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Copy package.json + package-lock.json
 COPY package*.json ./
 COPY prisma ./prisma
 
-# Install all dependencies (including dev) so Nest CLI works
+# Install all dependencies (including dev) so Nest CLI is available
 RUN npm install
 
-# Copy source code
+# Copy all source code
 COPY . .
 
-# Generate Prisma Client
+# Generate Prisma client
 RUN npx prisma generate
 
-# Build NestJS app
+# Compile TypeScript to JavaScript
 RUN npm run build
 
 
@@ -25,18 +25,19 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Copy package files and prisma schema
+# Copy package.json + prisma schema
 COPY package*.json ./
 COPY prisma ./prisma
 
 # Install only production dependencies
 RUN npm install --omit=dev
 
-# Copy compiled app from builder stage
+# Copy compiled code from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Expose backend port
+# Copy any assets if needed (optional)
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
 EXPOSE 3001
 
-# Run DB migrations & start
 CMD npx prisma migrate deploy && npm run start:prod
