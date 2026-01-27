@@ -1,22 +1,59 @@
-import { Controller, Post, Get, Body, Param } from "@nestjs/common";
+import { Controller, Post, Get, Body, Param, UseInterceptors, UploadedFile, Query } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { BlogsService } from "./blogs.service";
 import { CreateBlogDto } from "./dto/create-blog.dto";
+import { S3Service } from "src/s3/s3.service";
 
 @Controller("blogs")
 export class BlogsController {
-  constructor(private readonly blogsService: BlogsService) {}
+  constructor(
+    private readonly blogsService: BlogsService,
+    private readonly s3Service: S3Service,
+  ) {}
   @Post("create")
-  async createBlog(@Body() body: { authorId: string; dto: CreateBlogDto }) {
-    return this.blogsService.createBlog(body.authorId, body.dto);
+  @UseInterceptors(FileInterceptor('image'))
+  async createBlog(
+    @Body() body: { authorId: string; dto: CreateBlogDto },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    let imageUrl: string | undefined;
+    
+    if (file) {
+      imageUrl = await this.s3Service.uploadFile(file, 'blogs');
+    }
+
+    const dto = typeof body.dto === 'string' ? JSON.parse(body.dto) : body.dto;
+    return this.blogsService.createBlog(body.authorId, { ...dto, imageUrl });
   }
 
   @Get()
   async getAllBlog() {
-    return this.blogsService.getAllBlogs();
+    const blogs = await this.blogsService.getAllBlogs();
+    // Return blogs with signed URLs for images
+    const blogsWithSignedUrls = await Promise.all(
+      blogs.map(async (blog) => ({
+        ...blog,
+        imageUrl: blog.imageUrl ? await this.s3Service.getSignedDownloadUrl(blog.imageUrl) : null,
+      }))
+    );
+    return blogsWithSignedUrls;
+  }
+
+  @Get("signed-url")
+  async getSignedUrl(@Query("url") url: string) {
+    if (!url) {
+      return { signedUrl: null };
+    }
+    const signedUrl = await this.s3Service.getSignedDownloadUrl(url);
+    return { signedUrl };
   }
 
   @Get(":id")
   async getBlogById(@Param("id") id: string) {
-    return this.blogsService.getBlogById(id);
+    const blog = await this.blogsService.getBlogById(id);
+    if (blog && blog.imageUrl) {
+      blog.imageUrl = await this.s3Service.getSignedDownloadUrl(blog.imageUrl);
+    }
+    return blog;
   }
 }

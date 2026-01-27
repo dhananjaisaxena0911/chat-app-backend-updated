@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://postgres.ksdvhacsxhjnhqbnupch:fiGKHsVPo1Q4HsTG@aws-0-ap-south-1.pooler.supabase.com:5432/postgres"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -12,6 +12,10 @@ model User {
   username         String            @unique
   password         String
   email            String            @unique
+  bio              String?
+  avatarUrl        String?
+  coverUrl         String?
+  createdAt        DateTime          @default(now())
   groupMemberships GroupMember[]     @relation("UserGroupMemberships")
   groupMessages    GroupMessage[]    @relation("UserGroupMessages")
   receivedMessages Message[]         @relation("RecipientMessages")

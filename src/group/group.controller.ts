@@ -63,4 +63,9 @@ export class GroupController {
   getGroupMessages(@Param("groupId") groupId: string) {
     return this.groupService.getGroupMessages(groupId);
   }
+
+  @Get(":groupId/members")
+  getGroupMembers(@Param("groupId") groupId: string) {
+    return this.groupService.getGroupMembers(groupId);
+  }
 }

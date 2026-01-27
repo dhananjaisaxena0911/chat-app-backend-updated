@@ -1,7 +1,10 @@
 import {
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
+  NotFoundException,
+  forwardRef,
 } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
 import {
@@ -22,35 +25,52 @@ import { connect } from "http2";
 export class GroupService {
   constructor(
     private prisma: PrismaService,
+    @Inject(forwardRef(() => ChatGateway))
     private chatGateway: ChatGateway,
   ) {}
 
   async createGroup(dto: CreateGroupDto) {
     const { name, adminId, membersIds } = dto;
 
-    const group = await this.prisma.group.create({
-  data: {
-    name,
-    admin: {
-      connect: {
-        id: adminId,
-      },
-    },
-    members: {
-      create:
-        membersIds?.map((id) => ({
-          userId: id,
-        })) ?? [],
-    },
-  },
-});
+    // Filter out adminId from membersIds to avoid duplicate entry
+    const uniqueMembers = membersIds?.filter(id => id !== adminId) || [];
 
-    await this.prisma.groupMember.create({
+    const group = await this.prisma.group.create({
       data: {
-        groupId: group.id,
-        userId: adminId,
+        name,
+        admin: {
+          connect: {
+            id: adminId,
+          },
+        },
+        members: {
+          create:
+            uniqueMembers.map((id) => ({
+              userId: id,
+            })) || [],
+        },
+      },
+      include: {
+        members: true,
+        admin: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
       },
     });
+
+    // Add admin as member if not already included
+    const isAdminMember = group.members.some(m => m.userId === adminId);
+    if (!isAdminMember) {
+      await this.prisma.groupMember.create({
+        data: {
+          groupId: group.id,
+          userId: adminId,
+        },
+      });
+    }
 
     return group;
   }
@@ -110,6 +130,13 @@ export class GroupService {
     if (!isMember) {
       throw new ForbiddenException("User is not a member of the group");
     }
+    
+    // Get sender username
+    const sender = await this.prisma.user.findUnique({
+      where: { id: dto.senderId },
+      select: { username: true },
+    });
+
     const message = await this.prisma.groupMessage.create({
       data: {
         content: dto.content,
@@ -126,11 +153,22 @@ export class GroupService {
         },
       },
     });
-    this.chatGateway.server.to(dto.groupId).emit("Group-message-delivered", {
-      messageId: message.id,
-      groupId: dto.groupId,
-    });
-    return message;
+
+    // Emit the new message event with complete data
+    const formattedMessage = {
+      id: message.id,
+      groupId: message.groupId,
+      content: message.content,
+      createdAt: message.timeStamp.toISOString(),
+      senderId: message.senderId,
+      senderName: sender?.username || "Unknown",
+      status: message.status,
+      reaction: [],
+    };
+    
+    this.chatGateway.server.to(dto.groupId).emit("newGroupMessage", formattedMessage);
+
+    return formattedMessage;
   }
 
   async getGroupMessages(groupId: string) {
@@ -157,11 +195,36 @@ export class GroupService {
       id: msg.id,
       groupId: msg.groupId,
       content: msg.content,
-      createdAt: msg.timeStamp,
+      createdAt: msg.timeStamp.toISOString(),
       senderId: msg.sender.id,
       senderName: msg.sender.username,
       status: msg.status,
+      reaction: msg.reactions.map(r => ({ userId: r.userId, emoji: r.emoji })),
     }));
+  }
+
+  async getGroupMembers(groupId: string) {
+    const members = await this.prisma.groupMember.findMany({
+      where: { groupId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    return {
+      members: members.map(m => ({
+        id: m.user.id,
+        username: m.user.username,
+        avatarUrl: m.user.avatarUrl,
+        joinedAt: m.joinedAt,
+      })),
+    };
   }
   async addMember(dto: AddMemberDto) {
     return this.prisma.groupMember.create({
@@ -198,14 +261,19 @@ export class GroupService {
 
   async deleteGroup(groupId: string, adminId: string) {
     const group = await this.prisma.group.findUnique({
-      where: { id: groupId ,
-        adminId:adminId
-      },
-
+      where: { id: groupId },
     });
+
+    if (!group) {
+      throw new NotFoundException("Group not found");
+    }
+
+    if (group.adminId !== adminId) {
+      throw new ForbiddenException("Only the admin can delete this group");
+    }
 
     await this.prisma.groupMember.deleteMany({ where: { groupId } });
     await this.prisma.groupMessage.deleteMany({ where: { groupId } });
-    await this.prisma.group.delete({ where: { id: groupId } });
+    return this.prisma.group.delete({ where: { id: groupId } });
   }
 }
