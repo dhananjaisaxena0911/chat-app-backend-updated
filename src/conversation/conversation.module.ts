@@ -5,7 +5,8 @@ import { PrismaModule } from 'src/prisma/prisma.module';
 
 @Module({
   imports: [PrismaModule],
-  providers: [ConversationService,PrismaModule],
-  controllers: [ConversationController]
+  providers: [ConversationService],
+  controllers: [ConversationController],
+  exports: [ConversationService]
 })
 export class ConversationModule {}

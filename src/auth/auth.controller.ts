@@ -46,7 +46,6 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get("check")
   async checkAuth(@Req() req: Request, @Res() res: Response) {
-    // If JwtAuthGuard passes, user is authenticated
     return res.status(HttpStatus.OK).json({ authenticated: true });
   }
 }
