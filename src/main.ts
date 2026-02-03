@@ -10,7 +10,7 @@ async function bootstrap() {
       'http://localhost:3000',
       'http://127.0.0.1:3000',
       'http://192.168.2.211:3000',
-      'https://chat-app-frontend-v5.vercel.app',
+      'https://chat-app-frontend-v4.vercel.app',
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

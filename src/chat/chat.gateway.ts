@@ -306,6 +306,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     console.log("💬 Getting or creating conversation between:", data.userId1, data.userId2);
     
+    // Check if users follow each other (Instagram-style)
+    if (data.userId1 !== data.userId2) {
+      const canMessage = await this.messageService.canMessageUser(data.userId1, data.userId2);
+      if (!canMessage) {
+        throw new Error("You can only message users who follow you and you follow them back");
+      }
+    }
+    
     const existing = await this.prisma.conversation.findFirst({
       where: {
         participants: {
