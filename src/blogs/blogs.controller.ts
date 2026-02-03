@@ -39,6 +39,23 @@ export class BlogsController {
     return blogsWithSignedUrls;
   }
 
+  // Get blogs only from users that the current user follows
+  @Get("feed")
+  async getFollowingBlogs(@Query("userId") userId: string) {
+    if (!userId) {
+      return [];
+    }
+    const blogs = await this.blogsService.getFollowingBlogs(userId);
+    // Return blogs with signed URLs for images
+    const blogsWithSignedUrls = await Promise.all(
+      blogs.map(async (blog) => ({
+        ...blog,
+        imageUrl: blog.imageUrl ? await this.s3Service.getSignedDownloadUrl(blog.imageUrl) : null,
+      }))
+    );
+    return blogsWithSignedUrls;
+  }
+
   @Get("signed-url")
   async getSignedUrl(@Query("url") url: string) {
     if (!url) {

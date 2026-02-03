@@ -20,6 +20,7 @@ export class BlogsService {
       },
     });
   }
+  
   async getAllBlogs() {
     const blogs = await this.prisma.blog.findMany({
       include: {
@@ -29,6 +30,56 @@ export class BlogsService {
             email: true,
           },
         },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    // Generate signed URLs for all blog images
+    const blogsWithSignedUrls = await Promise.all(
+      blogs.map(async (blog) => ({
+        ...blog,
+        imageUrl: blog.imageUrl 
+          ? await this.s3Service.getSignedDownloadUrl(blog.imageUrl)
+          : null,
+      }))
+    );
+
+    return blogsWithSignedUrls;
+  }
+
+  // Get blogs only from users that the current user follows (including own posts)
+  async getFollowingBlogs(userId: string) {
+    const blogs = await this.prisma.blog.findMany({
+      where: {
+        OR: [
+          // Posts from users I follow
+          {
+            author: {
+              followers: {
+                some: {
+                  followerId: userId,
+                },
+              },
+            },
+          },
+          // My own posts
+          {
+            authorId: userId,
+          },
+        ],
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
       },
     });
 

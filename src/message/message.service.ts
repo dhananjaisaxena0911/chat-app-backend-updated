@@ -14,9 +14,39 @@ export class MessageService {
     @Inject(forwardRef(() => ChatGateway))
     private chatGateway: ChatGateway,
   ) {}
+
+  // Helper to check if two users follow each other (like Instagram DM)
+  async canMessageUser(senderId: string, recipientId: string): Promise<boolean> {
+    // Check if sender follows recipient
+    const senderFollowsRecipient = await this.prisma.follow.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId: senderId,
+          followingId: recipientId,
+        },
+      },
+    });
+
+    // Check if recipient follows sender (mutual follow like Instagram)
+    const recipientFollowsSender = await this.prisma.follow.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId: recipientId,
+          followingId: senderId,
+        },
+      },
+    });
+
+    // Allow messaging if either:
+    // 1. Both follow each other (mutual - Instagram style)
+    // 2. The sender is messaging themselves (own posts/stories)
+    return !!senderFollowsRecipient && !!recipientFollowsSender || senderId === recipientId;
+  }
+
   async sendMessage(senderId: string, recipientId: string, content: string) {
     if (!senderId || !recipientId) {
       console.log("Both sender id and Reciepient Id are needed!!");
+      throw new Error("Both sender id and Recipient Id are needed!!");
     }
 
     const sender = await this.prisma.user.findUnique({
@@ -29,6 +59,15 @@ export class MessageService {
     if (!sender || !recipient) {
       throw new Error("Sender or Recipient does not exist");
     }
+
+    // Check if users follow each other (Instagram-style)
+    if (senderId !== recipientId) {
+      const canMessage = await this.canMessageUser(senderId, recipientId);
+      if (!canMessage) {
+        throw new Error("You can only message users who follow you and you follow them back");
+      }
+    }
+
     let conversation = await this.prisma.conversation.findFirst({
       where: {
         participants: {
