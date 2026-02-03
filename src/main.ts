@@ -6,7 +6,7 @@ async function bootstrap() {
 
   app.enableCors({
   origin: [
-    'https://chat-app-frontend-v3.vercel.app',
+    'https://chat-app-frontend-v4.vercel.app',
   ],
   credentials: true,
 });
